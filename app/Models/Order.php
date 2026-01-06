@@ -9,6 +9,10 @@ class Order extends Model
 {
     use HasFactory;
 
+    const OPEN_ORDER      = 1;
+    const FILLED_ORDER    = 2;
+    const CANCELLED_ORDER = 3;
+
     protected $fillable = [
         'user_id',
         'symbol',
