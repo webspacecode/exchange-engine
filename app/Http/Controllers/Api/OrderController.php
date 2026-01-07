@@ -10,9 +10,11 @@ use App\Models\Order;
 use App\Models\Asset;
 use App\Models\User;
 
+use App\Services\InternalMatchingService;
+
 class OrderController extends Controller
 {
-    public function store(Request $request)
+    public function store(Request $request, InternalMatchingService $engine)
     {
         $request->validate([
             'symbol' => 'required|in:BTC,ETH',
@@ -23,7 +25,7 @@ class OrderController extends Controller
 
         $userId = auth()->id();
 
-        DB::transaction(function () use ($request, $userId) {
+        $order = DB::transaction(function () use ($request, $userId) {
             $user = User::where('id', $userId)
                 ->lockForUpdate()
                 ->first();
@@ -50,7 +52,7 @@ class OrderController extends Controller
                 $asset->save();
             }
 
-            Order::create([
+            return Order::create([
                 'user_id' => $user->id,
                 'symbol'  => $request->symbol,
                 'side'    => $request->side,
@@ -60,8 +62,12 @@ class OrderController extends Controller
             ]);
         });
 
+        // Trigger internal matching
+        $engine->match($order);
+
         return response()->json([
-            'message' => 'Order placed successfully'
+            'message' => 'Order placed successfully',
+            'order' => $order
         ], 201);
     }
 
