@@ -7,12 +7,13 @@ use App\Models\Asset;
 use App\Models\Trade;
 use App\Events\OrderMatched;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class InternalMatchingService
 {
     public function match(Order $newOrder)
     {
-        DB::transaction(function () use ($newOrder) {
+        $trans = DB::transaction(function () use ($newOrder) {
             $newOrder->refresh();
             $newOrder->lockForUpdate();
 
@@ -31,8 +32,26 @@ class InternalMatchingService
                 return;
             }
 
-            $this->executeMatch($newOrder, $counterOrder);
+            return $this->executeMatch($newOrder, $counterOrder);
         });
+
+        if (!$trans) {
+            return;
+        }
+
+        Log::info('BEFORE OrderMatched event');
+
+        DB::afterCommit(function () use ($trans) {
+            event(new OrderMatched(
+                $trans['buyOrder'],
+                $trans['sellOrder'],
+                $trans['price'],
+                $trans['amount'],
+                $trans['fee']
+            ));
+        });
+
+        Log::info('AFTER OrderMatched event');
     }
 
     public function findCounterOrder(Order $order)
@@ -124,13 +143,13 @@ class InternalMatchingService
             'volume'        => $volume,
             'fee'           => $fee,
         ]);
- 
-        broadcast(new OrderMatched(
-            $buyOrder,
-            $sellOrder,
-            $price,
-            $amount,
-            $fee
-        ));
+
+        return [
+            'buyOrder' => $buyOrder,
+            'sellOrder' => $sellOrder,
+            'price' => $price,
+            'amount' => $amount,
+            'fee' => $fee
+        ];
     }
 }

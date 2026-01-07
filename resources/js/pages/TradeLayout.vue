@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue';
 import axios from 'axios';
+import { getEcho } from '../echo';
 
 const pairs = [
   { label: 'BTC / USD', symbol: 'BTC' },
@@ -30,6 +31,7 @@ const logout = () => {
 const profile = ref({
   name: '',
   balanceUSD: 0,
+  id: ''
 });
 
 const fetchProfile = async () => {
@@ -48,14 +50,29 @@ const fetchProfile = async () => {
 
     profile.value.name = user.name;
     profile.value.balanceUSD = Number(user.balance).toFixed(2); // convert string to number
+    profile.value.id = user.id
+    localStorage.setItem('userId', profile.value.id)
   } catch (err) {
     console.error('Error fetching profile:', err);
     logout();
   }
 };
 
-onMounted(() => {
-  fetchProfile();
+onMounted(async () => {
+    await fetchProfile();
+
+    const token = localStorage.getItem('token');
+    const userId = localStorage.getItem('userId');
+
+    if (token && userId) {
+        const echo = getEcho(token);
+
+        echo.private(`user.${userId}`)
+            .listen('.OrderMatched', async (event) => {
+                console.log('Order matched', event);
+                await fetchProfile();
+            });
+    }
 });
 </script>
 

@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import TradeLayout from './TradeLayout.vue'
 import axios from 'axios';
+import { getEcho } from '../echo';
 
 const pairs = [
   { label: 'BTC / USD', symbol: 'BTC' },
@@ -50,6 +51,7 @@ const formatOrder = (order) => ({
   side: order.side ?? null,
   pair: order.pair ?? null,
   time: order.time ?? null,
+  id: order.id ?? null,
 })
 
 const fetchOrderBook = async (pair) => {
@@ -145,9 +147,47 @@ const placeOrder = async () => {
   }
 };
 
+const cancelOrder = async (orderId) => {
+  try {
+    const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    const res = await fetch(`/api/orders/${orderId}/cancel`, {
+      method: 'POST',
+      headers: {
+        'X-CSRF-TOKEN': token,
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        Accept: 'application/json',   // MUST
+        'Content-Type': 'application/json' // optional, safe to include
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error('Cancel failed');
+    }
+    await fetchOrderBook(symbol.value);
+  } catch (err) {
+    console.error('Cancel order error:', err);
+    alert('Unable to cancel order');
+  }
+};
+
 onMounted(() => {
-  fetchOrderBook(symbol.value)
-  fetchTrades()
+    fetchOrderBook(symbol.value)
+    fetchTrades()
+
+    const token = localStorage.getItem('token');
+    const userId = localStorage.getItem('userId');
+
+    if (token && userId) {
+        const echo = getEcho(token);
+
+        echo.private(`user.${userId}`)
+            .listen('.OrderMatched', async (event) => {
+                console.log('Order matched', event);
+                await fetchOrderBook(symbol.value);
+                await fetchTrades();
+            });
+    }
 })
 </script>
 
@@ -283,38 +323,53 @@ onMounted(() => {
 
 
     <template #openOrders>
-      <h2 class="font-semibold mb-3">Open Orders</h2>
+        <h2 class="font-semibold mb-3">Open Orders</h2>
 
-      <table class="w-full text-sm border-collapse">
-        <thead class="text-gray-500 border-b">
-          <tr>
-            <th class="text-left py-2">Side</th>
-            <th class="text-right py-2">Price (USD)</th>
-            <th class="text-right py-2">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(o, i) in openOrders"
-            :key="i"
-            class="border-b last:border-0"
-          >
-            <td
-              class="py-2"
-              :class="o.side === 'Buy' ? 'text-green-600' : 'text-red-500'"
+        <table class="w-full text-sm border-collapse">
+            <thead class="text-gray-500 border-b">
+            <tr>
+                <th class="text-left py-2">Side</th>
+                <th class="text-right py-2">Price (USD)</th>
+                <th class="text-right py-2">Status</th>
+                <th class="text-right py-2">Action</th>
+            </tr>
+            </thead>
+
+            <tbody>
+            <tr
+                v-for="(o, i) in openOrders"
+                :key="o.id ?? i"
+                class="border-b last:border-0"
             >
-              {{ o.side }}
-            </td>
-            <td class="text-right py-2">
-              {{ o.price.toLocaleString() }}
-            </td>
-            <td class="text-right py-2 text-green-600">
-              {{ o.status }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </template>
+                <td
+                class="py-2"
+                :class="o.side === 'Buy' ? 'text-green-600' : 'text-red-500'"
+                >
+                {{ o.side }}
+                </td>
+
+                <td class="text-right py-2">
+                {{ o.price.toLocaleString() }}
+                </td>
+
+                <td class="text-right py-2 text-green-600">
+                {{ o.status }}
+                </td>
+
+                <!-- Cancel Button -->
+                <td class="text-right py-2">
+                <button
+                    class="text-xs px-2 py-1 rounded border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition"
+                    @click="cancelOrder(o.id)"
+                >
+                    Cancel
+                </button>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        </template>
+
 
     <template #tradeHistory>
       <h2 class="font-semibold mb-3">Trade History</h2>

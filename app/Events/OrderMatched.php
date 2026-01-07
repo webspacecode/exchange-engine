@@ -3,6 +3,7 @@
 namespace App\Events;
 
 use App\Models\Order;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Queue\SerializesModels;
@@ -22,6 +23,12 @@ class OrderMatched implements ShouldBroadcast
 
     public function broadcastOn()
     {
+        Log::info('Broadcasting OrderMatched', [
+            'buy_user' => $this->buyOrder->user_id,
+            'sell_user' => $this->sellOrder->user_id,
+        ]);
+
+
         return [
             new PrivateChannel('user.' . $this->buyOrder->user_id),
             new PrivateChannel('user.' . $this->sellOrder->user_id),
@@ -39,7 +46,7 @@ class OrderMatched implements ShouldBroadcast
             'fee'           => $this->fee,
         ];
     }
-    
+
     public function broadcastAs(): string
     {
         return 'OrderMatched';

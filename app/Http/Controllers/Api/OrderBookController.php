@@ -25,7 +25,7 @@ class OrderBookController extends Controller
             ->orderBy('price', 'desc')
             ->orderBy('created_at', 'asc')
             ->limit(50)
-            ->get(['side', 'price', 'amount', 'status', 'created_at']);
+            ->get(['id', 'side', 'price', 'amount', 'status', 'created_at']);
 
         $buyOrders = Order::where('symbol', $symbol)
             ->where('user_id', $userId)
