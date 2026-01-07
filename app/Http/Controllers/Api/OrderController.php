@@ -64,4 +64,70 @@ class OrderController extends Controller
             'message' => 'Order placed successfully'
         ], 201);
     }
+
+    public function cancel(Request $request, $id)
+    {
+        $user = $request->user();
+
+        return DB::transaction(function () use ($user, $id) {
+            $order = Order::where('id', $id)
+                ->where('user_id', $user->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$order) {
+                return response()->json([
+                    'message' => 'Order not found'
+                ], 404);
+            }
+
+            if ($order->status !== 1) {
+                return response()->json([
+                    'message' => 'Only open orders can be cancelled'
+                ], 422);
+            }
+
+            if ($order->side === 'buy') {
+                $refund = bcmul($order->price, $order->amount, 8);
+
+                $user->lockForUpdate();
+
+                $user->balance = bcadd($user->balance, $refund, 8);
+                $user->save();
+            }
+
+            if ($order->side === 'sell') {
+                $asset = Asset::where('user_id', $user->id)
+                    ->where('symbol', $order->symbol)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$asset) {
+                    throw new \Exception('Asset row missing');
+                }
+
+                $asset->locked_amount = bcsub(
+                    $asset->locked_amount,
+                    $order->amount,
+                    8
+                );
+
+                $asset->amount = bcadd(
+                    $asset->amount,
+                    $order->amount,
+                    8
+                );
+
+                $asset->save();
+            }
+
+            // Change order status to cancel
+            $order->status = 3;
+            $order->save();
+
+            return response()->json([
+                'message' => 'Order cancelled successfully'
+            ]);
+        });
+    }
 }

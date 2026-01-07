@@ -11,11 +11,12 @@ Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile', [AuthController::class, 'profile']);
+    
     Route::post('/logout', [AuthController::class, 'logout']);
 
     Route::get('/orders', [OrderBookController::class, 'index']);
 
     Route::post('/orders', [OrderController::class, 'store']);
 
-
+    Route::post('/orders/{id}/cancel', [OrderController::class, 'cancel']);
 });
