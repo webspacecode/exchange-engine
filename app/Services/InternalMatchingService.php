@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\Asset;
+use App\Models\Trade;
 use App\Events\OrderMatched;
 use Illuminate\Support\Facades\DB;
 
@@ -110,7 +111,20 @@ class InternalMatchingService
 
         $buyOrder->save();
         $sellOrder->save();
-        
+
+        // Record Trade History
+        Trade::create([
+            'buy_order_id'  => $buyOrder->id,
+            'sell_order_id' => $sellOrder->id,
+            'buyer_id'      => $buyer->id,
+            'seller_id'     => $seller->id,
+            'symbol'        => $buyOrder->symbol,
+            'price'         => $price,
+            'amount'        => $amount,
+            'volume'        => $volume,
+            'fee'           => $fee,
+        ]);
+ 
         broadcast(new OrderMatched(
             $buyOrder,
             $sellOrder,
