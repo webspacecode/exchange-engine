@@ -77,7 +77,7 @@ class AuthController extends Controller
                 'success' => false,
                 'message' => 'Login failed',
                 'error' => $e->getMessage()
-            ]);
+            ], 500);
         }
     }
 
