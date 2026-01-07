@@ -38,17 +38,26 @@
 <script setup>
 import { reactive } from 'vue';
 import axios from 'axios';
+import { useRouter } from 'vue-router';
+const router = useRouter();
 
 const form = reactive({
   email: '',
   password: '',
 });
 
+
 const login = async () => {
   try {
     const res = await axios.post('/api/login', form);
-    localStorage.setItem('token', res.data.token);
-    window.location.href = '/dashboard';
+
+    const token = res.data.data.token;
+    localStorage.setItem('token', token);
+
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+    router.push('/dashboard');
+
   } catch (e) {
     alert('Invalid credentials');
   }

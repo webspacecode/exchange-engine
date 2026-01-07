@@ -1,50 +1,158 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import TradeLayout from './TradeLayout.vue'
+import axios from 'axios';
 
-const pairs = ['BTC/USD', 'ETH/USD']
-const selectedPair = ref('BTC/USD')
+const pairs = [
+  { label: 'BTC / USD', symbol: 'BTC' },
+  { label: 'ETH / USD', symbol: 'ETH' }
+]
 
-const symbol = computed(() => selectedPair.value.split('/')[0])
+const selectedPair = ref(pairs[0])
 
-const orderBook = {
-  'BTC/USD': {
-    sells: [
-      { price: 10300, amount: 0.8 },
-      { price: 10250, amount: 1.0 },
-      { price: 10220, amount: 0.5 },
-    ],
-    buys: [
-      { price: 10200, amount: 1.2 },
-      { price: 10180, amount: 1.5 },
-    ],
-  },
-  'ETH/USD': {
-    sells: [
-      { price: 2650, amount: 5 },
-      { price: 2620, amount: 3.2 },
-    ],
-    buys: [
-      { price: 2600, amount: 4.1 },
-      { price: 2580, amount: 6 },
-    ],
-  },
+const symbol = computed(() => selectedPair.value.symbol)
+
+const onSymbolChanged = async (newSymbol) => {
+  console.log('Symbol changed:', newSymbol)
+
+  // Fetch new data for the selected symbol
+  // Example: API call (replace with your actual API)
+  const data = await fetchOrderBook(newSymbol)
+  await fetchTrades()
+//   orderBook.value[newSymbol] = data.orderBook
+//   trades.value = data.trades
+//   openOrders.value = data.openOrders
 }
 
-const openOrders = [
-  { side: 'Sell', price: 10250, status: 'Open' },
-  { side: 'Buy', price: 10180, status: 'Open' },
-]
+const orderBook = ref({
+  BTC: { buys: [], sells: [] },
+  ETH: { buys: [], sells: [] },
+});
 
-const trades = [
-  { pair: 'BTC/USD', side: 'Buy', price: 10220, time: 'Just Now' },
-  { pair: 'BTC/USD', side: 'Sell', price: 10200, time: '2 mins ago' },
-  { pair: 'BTC/USD', side: 'Buy', price: 10150, time: '10 mins ago' },
-]
+const openOrders = ref({})
+
+const trades = ref({})
+
+const ORDER_STATUS_MAP = {
+  1: 'Open',
+  2: 'Filled',
+  3: 'Cancelled',
+};
+
+const formatOrder = (order) => ({
+  price: Number(order.price).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }),
+  amount: Number(order.amount).toFixed(4),
+  status: ORDER_STATUS_MAP[order.status] ?? 'Unknown',
+  created_at: order.created_at ?? null,
+  side: order.side ?? null,
+  pair: order.pair ?? null,
+  time: order.time ?? null,
+})
+
+const fetchOrderBook = async (pair) => {
+  try {
+    const token = localStorage.getItem('token');
+
+    const res = await axios.get(`/api/orders?symbol=${pair}`, {
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
+    });
+    const data = res.data;
+
+    if (!orderBook.value[pair]) {
+      orderBook.value[pair] = { buys: [], sells: [] };
+    }
+
+    orderBook.value[pair].buys = data.buy.map(formatOrder);
+    orderBook.value[pair].sells = data.sell.map(formatOrder);
+    console.log("dat", data)
+    openOrders.value = data.openOrder.map(formatOrder)
+
+  } catch (err) {
+    console.error(err);
+    orderBook.value[pair] = { buys: [], sells: [] };
+  }
+};
+
+const fetchTrades = async () => {
+  try {
+    const token = localStorage.getItem('token');
+
+    const res = await axios.get(`/api/trades`, {
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
+    });
+    const data = res.data;
+
+    console.log("dat", data)
+    trades.value = data.data.map(formatOrder)
+
+  } catch (err) {
+    console.error(err);
+    orderBook.value[pair] = { buys: [], sells: [] };
+  }
+};
+
+const side = ref('buy');
+const price = ref('');
+const amount = ref('');
+const loading = ref(false);
+
+const isValid = computed(() => {
+  return price.value > 0 && amount.value > 0;
+});
+
+const placeOrder = async () => {
+  if (!isValid.value) {
+    alert('Enter valid price and amount');
+    return;
+  }
+
+  loading.value = true;
+
+  try {
+    const token = localStorage.getItem('token');
+
+    await axios.post(
+      '/api/orders',
+      {
+        symbol: symbol.value,
+        side: side.value,
+        price: price.value,
+        amount: amount.value,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    price.value = '';
+    amount.value = '';
+
+    await fetchOrderBook(symbol.value);
+
+  } catch (err) {
+    alert(err.response?.data?.message ?? 'Order failed');
+  } finally {
+    loading.value = false;
+  }
+};
+
+onMounted(() => {
+  fetchOrderBook(symbol.value)
+  fetchTrades()
+})
 </script>
 
 <template>
-  <TradeLayout>
+  <TradeLayout v-model="selectedPair" @symbol-changed="onSymbolChanged">
     <template #header>
       <div
         class="bg-white rounded-lg shadow px-6 py-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
@@ -63,7 +171,7 @@ const trades = [
           <span>
             Last Price:
             <b class="text-green-600">
-              {{ orderBook[selectedPair].sells[0]?.price ?? '-' }} USD
+              {{ orderBook[selectedPair.symbol].sells[0]?.price ?? '-' }} USD
             </b>
           </span>
           <span>
@@ -79,72 +187,100 @@ const trades = [
     </template>
 
     <template #order>
-      <h2 class="font-semibold mb-4">Place Order</h2>
+        <h2 class="font-semibold mb-4">Place Order</h2>
 
-      <div class="flex gap-2 mb-3">
-        <button class="flex-1 bg-green-600 text-white py-2 rounded">
-          Buy {{ symbol }}
+        <div class="flex gap-2 mb-3">
+            <button
+            class="flex-1 py-2 rounded font-medium"
+            :class="side === 'buy'
+                ? 'bg-green-600 text-white'
+                : 'bg-green-100 text-green-700'"
+            @click="side = 'buy'"
+            >
+            Buy {{ symbol }}
+            </button>
+
+            <button
+            class="flex-1 py-2 rounded font-medium"
+            :class="side === 'sell'
+                ? 'bg-red-600 text-white'
+                : 'bg-red-100 text-red-700'"
+            @click="side = 'sell'"
+            >
+            Sell {{ symbol }}
+            </button>
+        </div>
+
+        <div class="space-y-2">
+            <input
+            v-model.number="price"
+            type="number"
+            placeholder="Price (USD)"
+            class="w-full border rounded px-3 py-2"
+            />
+            <input
+            v-model.number="amount"
+            type="number"
+            placeholder="Amount"
+            class="w-full border rounded px-3 py-2"
+            />
+        </div>
+
+        <button
+            class="w-full mt-4 py-2 rounded font-medium text-white"
+            :class="side === 'buy' ? 'bg-green-600' : 'bg-red-600'"
+            :disabled="!isValid || loading"
+            @click="placeOrder"
+        >
+        {{ loading ? 'Placing...' : 'Place Order' }}
         </button>
-        <button class="flex-1 bg-red-500 text-white py-2 rounded">
-          Sell {{ symbol }}
-        </button>
-      </div>
-
-      <div class="space-y-2">
-        <input
-          type="number"
-          placeholder="Price (USD)"
-          class="w-full border rounded px-3 py-2"
-        />
-        <input
-          type="number"
-          placeholder="Amount"
-          class="w-full border rounded px-3 py-2"
-        />
-      </div>
-
-      <button
-        class="w-full bg-green-600 text-white py-2 rounded mt-4 font-medium"
-      >
-        Place Order
-      </button>
     </template>
+
 
     <template #orderbook>
-      <h2 class="font-semibold mb-3">Order Book</h2>
+        <h2 class="font-semibold mb-3">Order Book</h2>
 
-      <h3 class="text-red-600 font-medium mb-2">Sell Orders</h3>
-      <table class="w-full text-sm border-collapse mb-4">
-        <thead class="text-gray-500 border-b">
-          <tr>
-            <th class="text-left py-2">Price (USD)</th>
-            <th class="text-left py-2">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="s in orderBook[selectedPair].sells" :key="s.price">
-            <td class="py-2">{{ s.price.toLocaleString() }}</td>
-            <td class="py-2">{{ s.amount }}</td>
-          </tr>
-        </tbody>
-      </table>
+        <h3 class="text-red-600 font-medium mb-2">Sell Orders</h3>
+        <table class="w-full text-sm border-collapse mb-4">
+            <thead class="text-gray-500 border-b">
+            <tr>
+                <th class="text-left py-2">Price (USD)</th>
+                <th class="text-left py-2">Amount</th>
+                <th class="text-right py-2">Status</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="s in orderBook[selectedPair.symbol].sells" :key="s.price">
+                <td class="py-2">{{ s.price }}</td>
+                <td class="py-2">{{ s.amount }}</td>
+                <td class="text-right py-2">
+                {{ s.status }}
+                </td>
+            </tr>
+            </tbody>
+        </table>
 
-      <h3 class="text-green-600 font-medium mb-2">Buy Orders</h3>
-      <table class="w-full text-sm border-collapse">
-        <thead class="text-gray-500 border-b">
-          <tr>
-            <th class="text-left py-2">Price (USD)</th>
-            <th class="text-left py-2">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="b in orderBook[selectedPair].buys" :key="b.price">
-            <td class="py-2">{{ b.price.toLocaleString() }}</td>
-            <td class="py-2">{{ b.amount }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </template>
+        <h3 class="text-green-600 font-medium mb-2">Buy Orders</h3>
+        <table class="w-full text-sm border-collapse">
+            <thead class="text-gray-500 border-b">
+            <tr>
+                <th class="text-left py-2">Price (USD)</th>
+                <th class="text-left py-2">Amount</th>
+                <th class="text-right py-2">Status</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="b in orderBook[selectedPair.symbol].buys" :key="b.price">
+                <td class="py-2">{{ b.price }}</td>
+                <td class="py-2">{{ b.amount }}</td>
+                <td class="text-right py-2">
+                {{ b.status }}
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        </template>
+
 
     <template #openOrders>
       <h2 class="font-semibold mb-3">Open Orders</h2>

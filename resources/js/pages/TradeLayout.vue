@@ -1,22 +1,61 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted } from 'vue';
+import axios from 'axios';
 
 const pairs = [
   { label: 'BTC / USD', symbol: 'BTC' },
   { label: 'ETH / USD', symbol: 'ETH' },
 ];
 
-const selectedPair = ref(pairs[0]);
+const props = defineProps({
+  modelValue: {
+    type: Object,
+    default: () => ({ label: 'BTC / USD', symbol: 'BTC' })
+  }
+});
 
-const emit = defineEmits(['symbol-changed']);
+const emit = defineEmits(['update:modelValue', 'symbol-changed']);
+const selectedPair = ref(props.modelValue);
+
+watch(selectedPair, (val) => {
+  emit('update:modelValue', val);
+  emit('symbol-changed', val.symbol);
+});
 
 const logout = () => {
   localStorage.removeItem('token');
   window.location.href = '/login';
 };
 
-watch(selectedPair, () => {
-  emit('symbol-changed', selectedPair.value.symbol);
+const profile = ref({
+  name: '',
+  balanceUSD: 0,
+});
+
+const fetchProfile = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      logout();
+      return;
+    }
+
+    const res = await axios.get('/api/profile', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const user = res.data.data;
+
+    profile.value.name = user.name;
+    profile.value.balanceUSD = Number(user.balance).toFixed(2); // convert string to number
+  } catch (err) {
+    console.error('Error fetching profile:', err);
+    logout();
+  }
+};
+
+onMounted(() => {
+  fetchProfile();
 });
 </script>
 
@@ -26,26 +65,17 @@ watch(selectedPair, () => {
     <div class="bg-white rounded-lg shadow px-6 py-4 mb-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
 
       <div>
-        <h1 class="text-lg font-semibold text-gray-800">
-          Exchange Dashboard
-        </h1>
-        <p class="text-sm text-gray-500">
-          Limit-Order Exchange Mini Engine
+        <h1 class="text-lg font-semibold text-gray-800">Exchange Dashboard</h1>
+        <p class="text-sm text-gray-500">Limit-Order Exchange Mini Engine</p>
+        <p class="text-sm text-gray-600 mt-1">
+          Welcome, <b>{{ profile.name }}</b> · Balance: <b>${{ profile.balanceUSD }}</b>
         </p>
       </div>
 
       <div class="flex items-center gap-2">
         <span class="text-sm text-gray-500">Trading Pair</span>
-
-        <select
-          v-model="selectedPair"
-          class="border rounded px-3 py-2 text-sm font-medium"
-        >
-          <option
-            v-for="p in pairs"
-            :key="p.symbol"
-            :value="p"
-          >
+        <select v-model="selectedPair" class="border rounded px-3 py-2 text-sm font-medium">
+          <option v-for="p in pairs" :key="p.symbol" :value="p">
             {{ p.label }}
           </option>
         </select>

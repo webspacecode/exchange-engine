@@ -4,6 +4,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\OrderBookController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\TradeController;
+
 
 
 Route::post('/register', [AuthController::class, 'register']);
@@ -19,4 +21,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/orders', [OrderController::class, 'store']);
 
     Route::post('/orders/{id}/cancel', [OrderController::class, 'cancel']);
+
+    Route::get('/trades', [TradeController::class, 'userTrades']);
 });

@@ -16,28 +16,41 @@ class OrderBookController extends Controller
         ]);
 
         $symbol = $request->symbol;
-        $status = Order::OPEN_ORDER;
-
-        $buyOrders = Order::where('symbol', $symbol)
-            ->where('side', 'buy')
-            ->where('status', $status)
+        $userId = $request->user()->id;
+    
+        $openOrders = Order::where('symbol', $symbol)
+            ->where('user_id', $userId)
+            ->whereIn('side', ['buy', 'sell'])
+            ->where('status', Order::OPEN_ORDER)
             ->orderBy('price', 'desc')
             ->orderBy('created_at', 'asc')
-            ->limit(3)
-            ->get(['price', 'amount', 'created_at']);
+            ->limit(50)
+            ->get(['side', 'price', 'amount', 'status', 'created_at']);
+
+        $buyOrders = Order::where('symbol', $symbol)
+            ->where('user_id', $userId)
+            ->where('side', 'buy')
+            ->whereIn('status', [Order::FILLED_ORDER, Order::CANCELLED_ORDER])
+            ->orderBy('price', 'desc')
+            ->orderBy('created_at', 'asc')
+            ->limit(50)
+            ->get(['price', 'amount', 'status', 'created_at']);
 
         $sellOrders = Order::where('symbol', $symbol)
+            ->where('user_id', $userId)
             ->where('side', 'sell')
-            ->where('status', $status)
+            ->whereIn('status', [Order::FILLED_ORDER, Order::CANCELLED_ORDER])
             ->orderBy('price', 'asc')
             ->orderBy('created_at', 'asc')
-            ->limit(3)
-            ->get(['price', 'amount', 'created_at']);
+            ->limit(50)
+            ->get(['price', 'amount', 'status', 'created_at']);
 
         return response()->json([
             'symbol' => $symbol,
             'buy'    => $buyOrders,
             'sell'   => $sellOrders,
+            'openOrder' => $openOrders
         ]);
+        
     }
 }
